@@ -96,13 +96,34 @@ def depthFirstSearch(problem:SearchProblem)->List[Direction]:
     print("Start's successors:", problem.getSuccessors(problem.getStartState()))
     """
 
-    '''
-        INSÉREZ VOTRE SOLUTION À LA QUESTION 1 ICI
-    '''
+    # Code modifié tiré de : https://www.geeksforgeeks.org/depth-first-search-or-dfs-for-a-graph/
 
-    util.raiseNotDefined()
+    from game import Actions
 
+    def recursive_dfs(visited_states: dict[Tuple[int, int]], current_state, path: list, sol):
+        visited_states[current_state] = True
 
+        if problem.isGoalState(current_state):            
+            for elem in path:
+                sol.append(elem)
+
+            return
+
+        for successor in problem.getSuccessors(current_state):
+            next_state = successor[0]
+
+            if visited_states.get(next_state) is None:
+                new_path = [x for x in path]
+                new_path.append(Actions.vectorToDirection((next_state[0] - current_state[0], next_state[1] - current_state[1])))
+                recursive_dfs(visited_states, next_state, new_path, sol)
+
+        return
+    
+    solution = []
+    recursive_dfs({}, problem.getStartState(), [], solution)
+    
+    return solution
+    
 def breadthFirstSearch(problem:SearchProblem)->List[Direction]:
     """Search the shallowest nodes in the search tree first."""
 

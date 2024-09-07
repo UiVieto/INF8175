@@ -96,32 +96,21 @@ def depthFirstSearch(problem:SearchProblem)->List[Direction]:
     print("Start's successors:", problem.getSuccessors(problem.getStartState()))
     """
 
-    # Code modifié tiré de : https://www.geeksforgeeks.org/depth-first-search-or-dfs-for-a-graph/
-
-    from game import Actions
-
-    def recursive_dfs(visited_states: dict[Tuple[int, int]], current_state, path: list, sol):
-        visited_states[current_state] = True
-
-        if problem.isGoalState(current_state):            
-            for elem in path:
-                sol.append(elem)
-
-            return
-
-        for successor in problem.getSuccessors(current_state):
-            next_state = successor[0]
-
-            if visited_states.get(next_state) is None:
-                new_path = [x for x in path]
-                new_path.append(Actions.vectorToDirection((next_state[0] - current_state[0], next_state[1] - current_state[1])))
-                recursive_dfs(visited_states, next_state, new_path, sol)
-
-        return
-    
+    stack = util.Stack()
+    visited = set()
     solution = []
-    recursive_dfs({}, problem.getStartState(), [], solution)
-    
+    stack.push((problem.getStartState(), []))
+    while not stack.isEmpty():
+        state, path = stack.pop()
+        if problem.isGoalState(state):
+            solution = path
+            break
+        if state in visited:
+            continue
+        visited.add(state)
+        for successor, direction, _ in problem.getSuccessors(state):
+            stack.push((successor, path + [direction]))
+        
     return solution
     
 def breadthFirstSearch(problem:SearchProblem)->List[Direction]:
@@ -131,18 +120,46 @@ def breadthFirstSearch(problem:SearchProblem)->List[Direction]:
     '''
         INSÉREZ VOTRE SOLUTION À LA QUESTION 2 ICI
     '''
+    queue = util.Queue()
+    visited = set()
+    solution = []
+    
+    queue.push((problem.getStartState(), []))
 
-    util.raiseNotDefined()
+    while not queue.isEmpty():
+        state, path = queue.pop()
+        if problem.isGoalState(state):
+            solution = path
+            break
+        if state in visited:
+            continue
+        visited.add(state)
+        for successor, direction, _ in problem.getSuccessors(state):
+            queue.push((successor, path + [direction]))
+
+    return solution
 
 def uniformCostSearch(problem:SearchProblem)->List[Direction]:
     """Search the node of least total cost first."""
-
-
     '''
         INSÉREZ VOTRE SOLUTION À LA QUESTION 3 ICI
     '''
+    priorityQueue = util.PriorityQueue()
+    visited = set()
+    solution = []
+    priorityQueue.push((problem.getStartState(), []), 0)
+    while not priorityQueue.isEmpty():
+        state, path = priorityQueue.pop()
+        if problem.isGoalState(state):
+            solution = path
+            break
+        if state in visited:
+            continue
+        visited.add(state)
+        for successor, direction, cost in problem.getSuccessors(state):
+            priorityQueue.push((successor, path + [direction]), cost + problem.getCostOfActions(path))
+    return solution
 
-    util.raiseNotDefined()
 
 def nullHeuristic(state:GameState, problem:SearchProblem=None)->List[Direction]:
     """
@@ -156,9 +173,22 @@ def aStarSearch(problem:SearchProblem, heuristic=nullHeuristic)->List[Direction]
     '''
         INSÉREZ VOTRE SOLUTION À LA QUESTION 4 ICI
     '''
-
-    util.raiseNotDefined()
-
+    priorityQueue = util.PriorityQueue()
+    visited = set()
+    solution = []
+    priorityQueue.push((problem.getStartState(), []), 0)
+    while not priorityQueue.isEmpty():
+        state, path = priorityQueue.pop()
+        if problem.isGoalState(state):
+            solution = path
+            break
+        if state in visited:
+            continue
+        visited.add(state)
+        for successor, direction, cost in problem.getSuccessors(state):
+            h = heuristic(successor, problem)
+            priorityQueue.push((successor, path + [direction]), (cost + problem.getCostOfActions(path) + h, h))
+    return solution
 
 # Abbreviations
 bfs = breadthFirstSearch

@@ -37,6 +37,7 @@ description for details.
 Good luck and happy searching!
 """
 
+from statistics import median
 from game import Directions
 from game import Agent
 from game import Actions
@@ -294,6 +295,7 @@ class CornersProblem(search.SearchProblem):
         '''
             INSÉREZ VOTRE SOLUTION À LA QUESTION 5 ICI
         '''
+        self.start = (self.startingPosition, startingGameState.getFood())
 
 
     def getStartState(self):
@@ -305,8 +307,8 @@ class CornersProblem(search.SearchProblem):
         '''
             INSÉREZ VOTRE SOLUTION À LA QUESTION 5 ICI
         '''
-        
-        util.raiseNotDefined()
+
+        return self.start      
 
     def isGoalState(self, state):
         """
@@ -317,7 +319,7 @@ class CornersProblem(search.SearchProblem):
             INSÉREZ VOTRE SOLUTION À LA QUESTION 5 ICI
         '''
 
-        util.raiseNotDefined()
+        return state[1].count() == 0
 
     def getSuccessors(self, state):
         """
@@ -342,8 +344,14 @@ class CornersProblem(search.SearchProblem):
             '''
                 INSÉREZ VOTRE SOLUTION À LA QUESTION 5 ICI
             '''
-
-
+            x, y = state[0]
+            dx, dy = Actions.directionToVector(action)
+            nextx, nexty = int(x + dx), int(y + dy)
+            hitsWall = self.walls[nextx][nexty]
+            if not hitsWall:
+                nextFood = state[1].copy()
+                nextFood[nextx][nexty] = False
+                successors.append((((nextx, nexty),nextFood), action, 1))
         self._expanded += 1 # DO NOT CHANGE
         return successors
 
@@ -379,9 +387,13 @@ def cornersHeuristic(state, problem):
     '''
         INSÉREZ VOTRE SOLUTION À LA QUESTION 6 ICI
     '''
+    distance = [util.manhattanDistance(state[0], corner) for corner in corners if state[1][corner[0]][corner[1]]]
+    return max(distance) if distance else 0
     
-    return 0
 
+
+
+    
 class AStarCornersAgent(SearchAgent):
     "A SearchAgent for FoodSearchProblem using A* and your foodHeuristic"
     def __init__(self):
@@ -477,7 +489,53 @@ def foodHeuristic(state, problem: FoodSearchProblem):
     '''
         INSÉREZ VOTRE SOLUTION À LA QUESTION 7 ICI
     '''
+    food = foodGrid.asList()
 
+    if not food:
+        return 0
 
-    return 0
+    points = [position] + food
 
+    def kruskalMstCost(points):
+        edges = util.PriorityQueue()
+        num_points = len(points)
+        parent = {}
+        for i in range(num_points):
+            parent[points[i]] = points[i]
+            for j in range(i + 1, num_points):
+                edges.push((util.manhattanDistance(points[i], points[j]), points[i], points[j]),util.manhattanDistance(points[i], points[j]),)
+        
+        def find(x):
+            y = parent[x]
+            if x != y:
+                y = parent[x] = find(y)
+            return y
+
+        def union(x, y):
+            rootX = find(x)
+            rootY = find(y)
+            if rootX != rootY:
+                parent[rootX] = rootY
+
+        mst_cost = 0
+        while not edges.isEmpty():
+            cost, u, v = edges.pop()
+            if find(u) != find(v):
+                union(u, v)
+                mst_cost += cost 
+        return mst_cost 
+    
+    mst_cost = kruskalMstCost(points) 
+    if 'previousMSTCost' not in problem.heuristicInfo:
+        problem.heuristicInfo['previousMSTCost'] = mst_cost
+    else:
+        previous_mst_cost = problem.heuristicInfo['previousMSTCost']
+        problem.heuristicInfo['previousMSTCost'] = mst_cost
+        WEIGHT_POSITIVE, WEIGHT_NEGATIVE = 3.2, 1
+      
+        if abs(mst_cost - previous_mst_cost) > 1:
+            return previous_mst_cost + WEIGHT_POSITIVE if mst_cost > previous_mst_cost else previous_mst_cost - WEIGHT_NEGATIVE
+
+    return mst_cost
+ 
+    

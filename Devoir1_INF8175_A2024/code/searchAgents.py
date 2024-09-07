@@ -503,7 +503,8 @@ def foodHeuristic(state, problem: FoodSearchProblem):
         for i in range(num_points):
             parent[points[i]] = points[i]
             for j in range(i + 1, num_points):
-                edges.push((util.manhattanDistance(points[i], points[j]), points[i], points[j]),util.manhattanDistance(points[i], points[j]),)
+                distance = util.manhattanDistance(points[i], points[j])
+                edges.push((distance, points[i], points[j]),distance)
         
         def find(x):
             y = parent[x]

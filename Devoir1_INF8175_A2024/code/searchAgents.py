@@ -387,7 +387,7 @@ def cornersHeuristic(state, problem):
     '''
         INSÉREZ VOTRE SOLUTION À LA QUESTION 6 ICI
     '''
-    distance = [util.manhattanDistance(state[0], corner) for corner in corners if state[1][corner[0]][corner[1]]]
+    distance = [manhattanWithWallPenalty(state[0], corner, walls) for corner in corners if state[1][corner[0]][corner[1]]]
     return max(distance) if distance else 0
     
 
@@ -490,6 +490,7 @@ def foodHeuristic(state, problem: FoodSearchProblem):
         INSÉREZ VOTRE SOLUTION À LA QUESTION 7 ICI
     '''
     food = foodGrid.asList()
+    walls = problem.walls.asList()
 
     if not food:
         return 0
@@ -503,8 +504,8 @@ def foodHeuristic(state, problem: FoodSearchProblem):
         for i in range(num_points):
             parent[points[i]] = points[i]
             for j in range(i + 1, num_points):
-                distance = util.manhattanDistance(points[i], points[j])
-                edges.push((distance, points[i], points[j]),distance)
+                distance = manhattanWithWallPenalty(points[i], points[j],walls)
+                edges.push((distance, points[i], points[j]), distance)
         
         def find(x):
             y = parent[x]
@@ -518,25 +519,40 @@ def foodHeuristic(state, problem: FoodSearchProblem):
             if rootX != rootY:
                 parent[rootX] = rootY
 
-        mst_cost = 0
+        mstCost = 0
         while not edges.isEmpty():
             cost, u, v = edges.pop()
             if find(u) != find(v):
                 union(u, v)
-                mst_cost += cost 
-        return mst_cost 
+                mstCost += cost 
+        return mstCost 
     
-    mst_cost = kruskalMstCost(points) 
+    mstCost = kruskalMstCost(points) 
     if 'previousMSTCost' not in problem.heuristicInfo:
-        problem.heuristicInfo['previousMSTCost'] = mst_cost
+        problem.heuristicInfo['previousMSTCost'] = mstCost
     else:
-        previous_mst_cost = problem.heuristicInfo['previousMSTCost']
-        problem.heuristicInfo['previousMSTCost'] = mst_cost
-        WEIGHT_POSITIVE, WEIGHT_NEGATIVE = 3.2, 1
+        previousMstCost = problem.heuristicInfo['previousMSTCost']
+        problem.heuristicInfo['previousMSTCost'] = mstCost
+        WEIGHT_POSITIVE, WEIGHT_NEGATIVE = 3.4, 1
       
-        if abs(mst_cost - previous_mst_cost) > 1:
-            return previous_mst_cost + WEIGHT_POSITIVE if mst_cost > previous_mst_cost else previous_mst_cost - WEIGHT_NEGATIVE
+        if abs(mstCost - previousMstCost) > 1:
+            return previousMstCost + WEIGHT_POSITIVE if mstCost > previousMstCost else previousMstCost - WEIGHT_NEGATIVE
 
-    return mst_cost
- 
-    
+    return mstCost
+def manhattanWithWallPenalty(pacPos,foodPos, walls, penalty=5):
+    baseDistance = util.manhattanDistance(pacPos, foodPos)
+
+    xPac, yPac = pacPos
+    xFood, yFood = foodPos
+    wallPenalty = 0
+    if xPac == xFood:  
+        for y in range(min(yPac, yFood) + 1, max(yPac, yFood)):
+            if (xPac, y) in walls:
+                wallPenalty += penalty
+    elif yPac == yFood: 
+        for x in range(min(xPac, xFood) + 1, max(xPac, xFood)):
+            if (x, yPac) in walls:
+                wallPenalty += penalty
+
+    return baseDistance + wallPenalty
+

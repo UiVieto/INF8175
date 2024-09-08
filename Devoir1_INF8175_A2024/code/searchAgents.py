@@ -1,3 +1,5 @@
+# Alaa Eddine Chenak, 1976567
+# Huy Viet Nguyen, 2136374
 # searchAgents.py
 # ---------------
 # Licensing Information:  You are free to use or extend these projects for

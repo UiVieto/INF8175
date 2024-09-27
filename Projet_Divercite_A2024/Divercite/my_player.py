@@ -4,6 +4,8 @@ from seahorse.game.game_state import GameState
 from game_state_divercite import GameStateDivercite
 from seahorse.utils.custom_exceptions import MethodNotImplementedError
 
+from minmax import compute_action
+
 class MyPlayer(PlayerDivercite):
     """
     Player class for Divercite game that makes random moves.
@@ -12,7 +14,7 @@ class MyPlayer(PlayerDivercite):
         piece_type (str): piece type of the player
     """
 
-    def __init__(self, piece_type: str, name: str = "MyPlayer"):
+    def __init__(self, piece_type: str, name: str = "AlphaShallowMinMax"):
         """
         Initialize the PlayerDivercite instance.
 
@@ -34,5 +36,4 @@ class MyPlayer(PlayerDivercite):
             Action: The best action as determined by minimax.
         """
 
-        #TODO
-        raise MethodNotImplementedError()
+        return compute_action(self, current_state, remaining_time)

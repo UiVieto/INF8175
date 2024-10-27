@@ -3,66 +3,15 @@
 
 import time
 import random
+from typing import Generator, Iterator
+from math import exp, floor
+from copy import deepcopy
 
 from schedule import Schedule
 
 
-def get_neighborhood(solution: dict, schedule: Schedule, timeout: lambda: bool, max_neighborhood_size: int=500):
-    """Retourne un générateur du voisinage d'une solution et d'une certaine taille maximale. 
-    Chaque élément du voisinage va différer d'au maximum un crénau par rapport à la solution donnée. 
-    Si la fonction timeout retroune vrai, aucun voisinage est retourné et l'exécution s'arrête
-    lorsque possible.
+type Transition = tuple[int, int]  # Transition d'un cours d'un créneau vers un autre
 
-    :solution: dict
-    """
-    if timeout(): return []
-
-    yield solution.copy()
-
-    counter = 0
-    number_slots = schedule.get_n_creneaux(solution)
-    courses = list(solution.keys())
-    random.shuffle(courses)
-
-    for course in courses:
-        if timeout(): return []
-
-        if counter < max_neighborhood_size:
-            neighbor = solution.copy()
-            neighbor[course] = random.randint(1, number_slots)
-            counter += 1
-
-            yield neighbor
-        else:
-            return
-
-def get_valid_neighbors(neighboors: list[dict], schedule: Schedule, timeout: lambda: bool) -> list[dict]:
-    valid_neighbors = []
-
-    for possible_solution in neighboors:
-        if timeout(): return []
-
-        if sum(possible_solution[a[0]] == possible_solution[a[1]] for a in schedule.conflict_list) == 0:
-            valid_neighbors.append(possible_solution)
-
-    return valid_neighbors
-
-def select(neighbors: list[dict], schedule: Schedule, timeout: lambda: bool) -> dict | None:
-    if timeout(): return dict()
-
-    min_slots = schedule.get_n_creneaux(min(neighbors, key=lambda neighbor: schedule.get_n_creneaux(neighbor)))
-    
-    possible_solutions = []
-    for neighbor in neighbors:
-        if timeout(): return dict()
-
-        if schedule.get_n_creneaux(neighbor) == min_slots:
-            possible_solutions.append(neighbor)
-
-    return possible_solutions[random.randint(0, len(possible_solutions) - 1)]
-
-def eval(solution: dict, schedule: Schedule) -> int:
-    return schedule.get_n_creneaux(solution)
 
 def get_timer(duration: int = 300, time_margin: int = 5):
     assert duration > time_margin
@@ -89,28 +38,136 @@ def get_random_solution(schedule: Schedule) -> dict:
 
     return solution
 
-def local_search(schedule: Schedule, initial_solution: dict, timeout: lambda: bool, stagnation_counter: int=5):
-    best_solution = initial_solution
-    counter = 0
+def get_neighborhood(
+        slots: list, 
+        transitions_per_branches: int,
+        number_of_branches: int,
+        timeout: lambda: bool
+    ) -> Generator[list[Transition], None, None]:
+    """Génère un voisinage pour la recherche. Pour éviter de faire une
+    nouvelle copie de la solution à chaque voisin, seul des listes de 
+    transitions d'une certaine taille pour aller d'un voisin vers un 
+    autre (qu'on va appeler branches) sont données.
+    """
+
+    transitions = []
+    for _ in range(number_of_branches):
+        for _ in range(transitions_per_branches):
+            if timeout(): yield []
+
+            i = random.randint(0, len(slots) - 1)
+            j = (i + random.randint(0, len(slots) - 2)) % len(slots)  # Moyen pour éviter des transitions (i, i) qui ne fait rien
+
+            transitions.append((slots[i], slots[j]))
+
+        yield transitions
+
+def apply_transitions(course_slots, conflicts, transitions, timeout) -> list[Transition] | None:
+    actual_transitions = []
+    for transition in transitions:
+        if timeout(): return []
+
+        i, j = transition
+
+        if course_slots.get(i) is None or course_slots.get(j) is None:
+            continue
+
+        course = course_slots[i].pop()
+        course_conflicts = conflicts[course]
+
+        if any(course in course_conflicts for course in course_slots[j]):
+            course_slots[i].append(course)
+        else:
+            course_slots[j].append(course)
+            actual_transitions.append(transition)
+
+            if len(course_slots[i]) == 0:
+                del course_slots[i]
+
+    return actual_transitions
+
+def revert_transitions(course_slots, transitions: list, timeout):
+    transitions.reverse()
+    for transition in transitions:
+        if timeout(): return
+
+        j, i = transition
+
+        course = course_slots[i].pop()
+        course_slots.setdefault(j, list()).append(course)
+
+        if len(course_slots[i]) == 0:
+            del course_slots[i]
+
+def select(
+        course_slots: dict[int, list],
+        conflicts: dict[str, set],
+        neighborhood: Iterator[list[Transition]],
+        temperature: int,
+        timeout: lambda: bool
+    ) -> bool:
+
+    for transitions in neighborhood:
+        initial_score = len(course_slots)
+
+        transitions = apply_transitions(course_slots, conflicts, transitions, timeout)
+
+        score_variation = initial_score - len(course_slots)
+        if score_variation > 0:
+            return True  # Amélioration de la solution; on garde la solution actuelle
+        
+        else:
+            return False
+        #prob = exp(-1 * score_variation / temperature)
+        #if random.random() > prob:
+            #return False  # On garde la solution malgré une dégration
+        
+        # On a fini le parcours d'une branche de transitions; on rétourne à la solution initiale
+        #revert_transitions(course_slots, transitions, timeout)
+            
+def local_search(
+        schedule: Schedule,
+        initial_solution: dict,
+        timeout: lambda: bool,
+        stagnation_counter: int=20
+    ) -> tuple[dict, int]:
+
+    conflicts: dict[str, set] = { course:schedule.get_node_conflicts(course) for course in schedule.course_list }
     
+    course_slots: dict[int, list] = dict()
+    for course, slot in initial_solution.items():
+        course_slots.setdefault(slot, list()).append(course)
+
+    initial_score = len(course_slots)
+    best_solution = deepcopy(course_slots)
+    best_score = initial_score
+
+    i = 0
     while not timeout():
-        keys = list(best_solution.keys())
-        random.shuffle(keys)
-        neighborhood = get_neighborhood(best_solution, schedule, timeout)
-        valid_neighbors = get_valid_neighbors(neighborhood, schedule, timeout)
-        current_solution = select(valid_neighbors, schedule, timeout)
+        # L'équation pour déterminer le nombre de transitions par branche a été trouvé expérimentalement.
+        # Plus le score initial est grand, plus le nombre de transitions sera grand.
+        # Si la solution s'améliore (soit le score diminue), moins il aura de transitions par branche.
+        # Si la solution s'empire (soit le score augmente), plus il aura de transitions par branche.
+        transitions_per_branch = max(1, floor(2 * (initial_score + best_score) / (10 + initial_score + (0.5 * best_score))))
+        
+        neighborhood = get_neighborhood(list(course_slots.keys()), transitions_per_branch, 10, timeout)
+        is_improvement = select(course_slots, conflicts, neighborhood, 3, timeout)
 
-        if not timeout():
-            if eval(best_solution, schedule) > eval(current_solution, schedule):
-                best_solution = current_solution
-                counter = 0
-            else:
-                counter += 1
+        if is_improvement:
+            i = 0
+            best_solution = deepcopy(course_slots)
+        else:
+            i += 1
 
-            if counter >= stagnation_counter:
-                return best_solution
-                    
-    return best_solution
+        if i == stagnation_counter:
+            break
+
+    solution = dict()
+    for slot, courses in enumerate(best_solution.values()):
+        for course in courses:
+            solution[course] = slot + 1
+
+    return solution, len(best_solution)
 
 def solve(schedule: Schedule):
     """
@@ -119,22 +176,25 @@ def solve(schedule: Schedule):
     :return: a list of tuples of the form (c,t) where c is a course and t a time slot. 
     """
     # Add here your agent
-    timeout = get_timer()
+    timeout = get_timer(100, 0)
 
     random_solution = get_random_solution(schedule)
-    best_solution = random_solution
+    best_solution = deepcopy(random_solution)
+    best_eval = schedule.get_n_creneaux(random_solution)
 
     i = 0
-    with open('stats.txt', 'a') as f:
-        while not timeout():
+    while not timeout():
+        try:
+            solution, evaluation = local_search(schedule, random_solution, timeout, len(best_solution))
+        except Exception as e:
             i += 1
-            start = time.time()
-            solution = local_search(schedule, random_solution, timeout, (schedule.get_n_creneaux(random_solution) // 5) + 1)
+            continue  # TODO: Corriger l'erreur. Je ne sais pas c'est quoi l'erreur.
 
-            if eval(best_solution, schedule) > eval(solution, schedule):
-                f.write(f"Search count: {i}, Time spent in search: {time.time() - start}, Solution: {schedule.get_n_creneaux(solution)}\n")
-                best_solution = solution
+        if timeout(): break
 
-        f.write(f"Number of searches: {i}\n")
+        if best_eval > evaluation:
+            best_solution = solution
+            best_eval = evaluation
+            print("Meilleure solution:", schedule.get_n_creneaux(solution), 'Erreurs:', i)
 
     return best_solution

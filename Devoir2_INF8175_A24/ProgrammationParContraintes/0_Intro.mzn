@@ -1,5 +1,5 @@
-% NOM_ETUDIANT_1 (MATRICULE_1)
-% NOM_ETUDIANT_2 (MATRICULE_2)
+% Huy Viet Nguyen (2136374)
+% Alaa Eddine Chenak (1976567)
 
 include "globals.mzn";
 

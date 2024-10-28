@@ -9,7 +9,6 @@ from schedule import Schedule
 
 type Transition = tuple[int, int]  # Transition d'un cours d'un créneau vers un autre
 
-
 def get_timer(duration: int = 300, time_margin: int = 5):
     """
     Génère une fonction qui indique si le temps est écoulé ou non.
@@ -47,6 +46,10 @@ def local_search(
         timeout: lambda: bool,
         stagnation_counter: int
     ) -> tuple[dict, int]:
+    """
+    Effectue une recherche locale 
+    """
+
     # Conflits pour chaque cours. Pour simplifier l'accès au conflits d'un cours.
     conflicts: dict[str, set] = { course:schedule.get_node_conflicts(course) for course in schedule.course_list }
     
@@ -69,7 +72,7 @@ def local_search(
         # est suffisament grand, la recherche va converger rapidement vers une
         # très bonne solution. Cependant, plus le nombre de transitions est
         # grand, plus le coût en temps de calcul sera grand.
-        number_transitions = 20000
+        number_transitions = 10000
         transitions = get_neighbor(list(course_slots.keys()), number_transitions, timeout)
         solution = select(course_slots, conflicts, transitions, timeout)
 
@@ -102,7 +105,7 @@ def get_neighbor(
     """
     transitions = []
     for _ in range(number_transitions):
-        if timeout(): []
+        if timeout(): return []
 
         i = random.randint(0, len(slots) - 1)
         j = (i + random.randint(0, len(slots) - 2)) % len(slots)  # Moyen pour éviter des transitions (i, i) qui ne fait rien
@@ -166,18 +169,15 @@ def solve(schedule: Schedule):
     # Add here your agent
     timeout = get_timer()
 
-    old_solution = get_random_solution(schedule)
-    best_solution = deepcopy(old_solution)
-    best_eval = schedule.get_n_creneaux(old_solution)
-
-    stagnation_counter = best_eval
+    best_solution = None
+    best_eval = 99999999
+    stagnation_counter = len(schedule.conflict_graph)
 
     while not timeout():
         try:
-            # Techniquement une seule recherche locale est faite, car on fait toujours la recherche sur
-            # old_solution qui représente l'endroit où la recherche s'est arrêtée. Le stagnation_counter
-            # sert plus à obtenir la meilleure solution actuelle que la recherche a trouvée.
-            solution, evaluation = local_search(schedule, old_solution, timeout, stagnation_counter)
+            # Recherche locale avec redémarrage lorsqu'il ne semble plus avoir d'amélioration.
+            random_solution = get_random_solution(schedule)
+            solution, evaluation = local_search(schedule, random_solution, timeout, stagnation_counter)
         except Exception:
             continue  # Pour éviter que la recherche se termine à cause d'une erreur et aucune solution n'est retournée.
 

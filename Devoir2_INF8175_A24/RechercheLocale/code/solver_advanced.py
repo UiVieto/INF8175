@@ -186,6 +186,5 @@ def solve(schedule: Schedule):
         if best_eval > evaluation:
             best_solution = solution
             best_eval = evaluation
-            print("Meilleure solution:", best_eval)
 
     return best_solution

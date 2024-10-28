@@ -72,7 +72,7 @@ def local_search(
         # est suffisament grand, la recherche va converger rapidement vers une
         # très bonne solution. Cependant, plus le nombre de transitions est
         # grand, plus le coût en temps de calcul sera grand.
-        number_transitions = 10000
+        number_transitions = 2000
         transitions = get_neighbor(list(course_slots.keys()), number_transitions, timeout)
         solution = select(course_slots, conflicts, transitions, timeout)
 

@@ -23,8 +23,19 @@ var int: p;
 %-----------------------------------------------------------------------------%
 % Partie étudiant
 %-----------------------------------------------------------------------------%
+var int: objective = chiffres[2] * chiffres[3] * chiffres[4];
 
+nombre = 1000*chiffres[1] + 100*chiffres[2] + 10*chiffres[3] + chiffres[4];
 
+constraint nombre mod 2 = 0;
+constraint all_different(chiffres);
+constraint forall(k in 1..4)(chiffres[k] != 0);
+constraint sum(i in 1..4)(chiffres[i]) > 15;
+constraint chiffres[1] > chiffres[2];
+constraint chiffres[3] < chiffres[4];
+constraint chiffres[2] > chiffres[4];
+
+solve minimize objective;
 %-----------------------------------------------------------------------------%
 
 output [

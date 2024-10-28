@@ -24,9 +24,16 @@ array [1..n] of var 1..n: assignation_role;
 %-----------------------------------------------------------------------------%
 % Partie étudiant
 %-----------------------------------------------------------------------------%
+constraint all_different(i in 1..n)(choix_costume[assignation_role[i], i]);
+constraint all_different(i in 1..n)(assignation_role[i]);
+constraint forall(i in 2..n-1)(assignation_role[i] != (assignation_role[i+1] + 1));
+constraint forall(i in 2..n-1)(assignation_role[i] != (assignation_role[i+1] - 1));
+constraint forall(i in 2..n-1)(assignation_role[i] != (assignation_role[i-1] + 1));
+constraint forall(i in 2..n-1)(assignation_role[i] != (assignation_role[i-1] - 1));
+constraint assignation_role[1] != (assignation_role[2] + 1);
+constraint assignation_role[n] != (assignation_role[n-1] - 1);
 
-
-
+solve satisfy;
 %-----------------------------------------------------------------------------%
 
 output	

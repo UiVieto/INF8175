@@ -47,7 +47,9 @@ def local_search(
         stagnation_counter: int
     ) -> tuple[dict, int]:
     """
-    Effectue une recherche locale 
+    Effectue une recherche locale à partir d'une solution initiale. Si le
+    temps alloué est dépassé ou le nombre d'itération où aucune amélioration
+    est observé, le recherche se termine.
     """
 
     # Conflits pour chaque cours. Pour simplifier l'accès au conflits d'un cours.
@@ -175,7 +177,7 @@ def solve(schedule: Schedule):
 
     while not timeout():
         try:
-            # Recherche locale avec redémarrage lorsqu'il ne semble plus avoir d'amélioration.
+            # Recherche locale avec redémarrage lorsqu'il semble avoir stagnation (minimum local).
             random_solution = get_random_solution(schedule)
             solution, evaluation = local_search(schedule, random_solution, timeout, stagnation_counter)
         except Exception:

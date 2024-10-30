@@ -9,9 +9,9 @@ include "globals.mzn";
 
 % Nombre de villes à visiter + point de départ de la tournée
 int: n;
- % Distance entre chaque villes (symmétrique)
+% Distance entre chaque villes (symmétrique)
 array[1..n,1..n] of int: distance;
- % Distance minimale possible entre deux villes différentes
+% Distance minimale possible entre deux villes différentes
 int: min_val = min([distance[i,j] | i,j in 1..n where distance[i,j] > 0]);
 % Distance maximale possible entre deux villes différentes
 int: max_val = max([distance[i,j] | i,j in 1..n]);
@@ -48,8 +48,42 @@ var int: temps_trajet;
 %-----------------------------------------------------------------------------%
 % Partie étudiant
 %-----------------------------------------------------------------------------%
+% Le temps du trajet ne peut pas dépasser le temps maximal pour un trajet
+constraint temps_trajet <= max_trajet;
 
+% Le trajet doit passer par tous les villes dans la fenêtre d'arrivée
+constraint forall(i in 1..n)(cumul_temps[i] <= fenetre_arrivee[chemin_tournee[i], 2]);
 
+% Les temps cumulés et le temps du trajet sont toujours bornés par un facteur de la distance minimale entre deux villes
+constraint forall(i in 1..n)(cumul_temps[i] >= min_val * i);
+constraint temps_trajet >= min_val  * n;
+
+% Le temps d'attente ne peut pas être plus grand que la fenetre
+constraint forall(i in 1..n)(temps_attente[chemin_tournee[i]] <= fenetre_arrivee[chemin_tournee[i], 2] - fenetre_arrivee[chemin_tournee[i], 1]);
+constraint forall(i in 1..n)(temps_attente[i] >= 0);
+
+% La tournée doit passer par une ville une fois. Et, la tournée commence et se termine à la ville 1.
+constraint all_different(chemin_tournee);
+constraint all_different(circuit_tournee);
+constraint chemin_tournee[n] = 1;
+
+% Circuit
+constraint circuit_tournee[1] = chemin_tournee[1];
+constraint forall(i in 2..n)(circuit_tournee[chemin_tournee[i-1]] = chemin_tournee[i]);
+
+% Entrée dans la première ville
+constraint cumul_temps[1] = max(fenetre_arrivee[chemin_tournee[1], 1], distance[1, chemin_tournee[1]]);
+constraint temps_attente[chemin_tournee[1]] = max(fenetre_arrivee[chemin_tournee[1], 1] - distance[1, chemin_tournee[1]], 0);
+
+% Le reste des villes
+constraint forall(i in 2..n)
+    (cumul_temps[i] = max(cumul_temps[i-1] + distance[chemin_tournee[i-1], chemin_tournee[i]], fenetre_arrivee[chemin_tournee[i], 1]));
+constraint forall(i in 2..n)
+    (temps_attente[chemin_tournee[i]] = max(fenetre_arrivee[chemin_tournee[i], 1] - cumul_temps[i-1] - distance[chemin_tournee[i-1], chemin_tournee[i]], 0));
+
+temps_trajet = cumul_temps[n];
+
+solve minimize temps_trajet;
 %-----------------------------------------------------------------------------%
 
 output [

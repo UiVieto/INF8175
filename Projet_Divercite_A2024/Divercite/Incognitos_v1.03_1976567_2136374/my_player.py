@@ -15,35 +15,12 @@ def get_other_player(my_player: PlayerDivercite, state: GameState) -> PlayerDive
         if player.get_id() != my_player.get_id():
             return player
 
-def determine_game_phase(state: GameState) -> str:
-    # Determine game phase based on the number of moves played
-    if state.get_step() < 20:
-        return "start"
-    elif 20 <= state.get_step() < 50:
-        return "middle"
-    else:
-        return "end"
-
-def depth_weight(depth: int, game_phase: str) -> float:
-    # Assign weights based on depth and game phase
-    if game_phase == "start":
-        weights = {1: 0.2, 2: 0.3, 3: 0.5}  # Emphasize shallow depths for exploration
-    elif game_phase == "middle":
-        weights = {1: 0.3, 2: 0.3, 3: 0.4}  # Balanced weights for mid-game
-    else:  # end
-        weights = {1: 0.2, 2: 0.4, 3: 0.4}  # Prioritize deeper levels for accurate endgame moves
-    
-    return weights.get(depth, 1.0)  # Default to 1.0 if depth is beyond predefined weights
-
-def evaluate_action(player: PlayerDivercite, action: Action, current_state: GameState, depth: int, game_phase: str) -> float:
+def evaluate_action(player: PlayerDivercite, action: Action, current_state: GameState) -> float:
     next_state = action.get_next_game_state()
     other_player = get_other_player(player, next_state)
-    base_score = next_state.scores[player.get_id()] - next_state.scores[other_player.get_id()]
-    weight = depth_weight(depth, game_phase)
-    return base_score * weight
+    return next_state.scores[player.get_id()] - next_state.scores[other_player.get_id()]
 
 def minimax_heuristic(player: PlayerDivercite, current_state: GameState, depth: int, is_maximizing: bool, alpha: float = float('-inf'), beta: float = float('inf'), remaining_time: int = 1e9):
-    game_phase = determine_game_phase(current_state)
     state_key = (hash(current_state), depth, is_maximizing)
     if state_key in transposition_table:
         return transposition_table[state_key]
@@ -56,7 +33,7 @@ def minimax_heuristic(player: PlayerDivercite, current_state: GameState, depth: 
     best_action = None
     actions = sorted(
         current_state.generate_possible_heavy_actions(),
-        key=lambda x: evaluate_action(player, x, current_state, depth, game_phase),
+        key=lambda x: evaluate_action(player, x, current_state),
         reverse=is_maximizing
     )
 
@@ -87,11 +64,49 @@ def minimax_heuristic(player: PlayerDivercite, current_state: GameState, depth: 
         transposition_table[state_key] = (best_action, min_score)
         return best_action, min_score
 
+def determine_depth(current_state, remaining_time: int, base_depth=4) -> int:
+    """
+    Adaptive depth: dynamically adjust depth based on game progression, score difference, 
+    and remaining time.
+    
+    Parameters:
+        current_state (GameStateDivercite): The current state of the game.
+        remaining_time (int): Time left in milliseconds.
+        base_depth (int): The default depth to start with.
+    
+    Returns:
+        int: Adjusted depth for minimax search.
+    """
+    step = current_state.get_step()  # Current step of the game
+    remaining_steps = current_state.max_step - step
+    
+    # Calculate score difference between the leading player and the others
+    scores = current_state.scores
+    max_score = max(scores.values())
+    min_score = min(scores.values())
+    score_difference = abs(max_score - min_score)
+
+    # Adjust depth based on remaining time
+    if remaining_time < 500:  # Less than 500 ms
+        return max(1, base_depth - 2)
+    elif remaining_time < 2000:  # Less than 2 seconds
+        return max(1, base_depth - 1)
+    print(score_difference)
+    # Increase depth if close to endgame or if score difference is large
+    if remaining_steps <= 5 or score_difference > 400:
+        return base_depth + 3
+    elif remaining_steps <= 10 or score_difference > 200:
+        return base_depth + 2
+
+    return base_depth
+
 class MyPlayer(PlayerDivercite):
     def __init__(self, piece_type: str, name: str = "ShallowMinMax"):
         super().__init__(piece_type, name)
 
     def compute_action(self, current_state, remaining_time: int = 1e9, **kwargs) -> Action:
         # Determine the optimal depth based on current game state and remaining time
-        best_action, _ = minimax_heuristic(self, current_state, depth=4, is_maximizing=True, alpha=float('-inf'), beta=float('inf'), remaining_time=remaining_time)
+        depth = determine_depth(current_state, remaining_time, base_depth=5)
+        print(depth)
+        best_action, _ = minimax_heuristic(self, current_state, depth=depth, is_maximizing=True, alpha=float('-inf'), beta=float('inf'), remaining_time=remaining_time)
         return best_action

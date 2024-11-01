@@ -4,58 +4,87 @@ from seahorse.game.game_state import GameState
 from game_state_divercite import GameStateDivercite
 from seahorse.utils.custom_exceptions import MethodNotImplementedError
 
-
+transposition_table = {}
 def get_other_player(my_player: PlayerDivercite, state: GameState) -> PlayerDivercite:
     for player in state.get_players():
         if player.get_id() != my_player.get_id():
             return player
 
+def evaluate_action(player: PlayerDivercite, action: Action, current_state: GameState) -> float:
+    """
+    Evaluates the action based on some heuristic relevant to the game, e.g., a score difference heuristic.
+    """
+    next_state = action.get_next_game_state()
+    other_player = get_other_player(player, next_state)
+    return next_state.scores[player.get_id()] - next_state.scores[other_player.get_id()]
 
-def _maxValue(player: PlayerDivercite, current_state: GameState, a: int, b: int, turns_to_search: int = 2,  remaining_time: int = 1e9) -> tuple[int, Action]:
-    if turns_to_search == 0 or current_state.is_done():
+
+def minimax_heuristic(player: PlayerDivercite, current_state: GameState, depth: int, is_maximizing: bool, alpha: float = float('-inf'), beta: float = float('inf'), remaining_time: int = 1e9):
+    """
+    Perform a minimax-like recursive heuristic with alpha-beta pruning to find the best action based on future predictions.
+    Uses iterative deepening, memoization, and move ordering to improve efficiency.
+
+    Args:
+        player (PlayerDivercite): The current player making the move.
+        current_state (GameState): The current game state.
+        depth (int): The depth of recursion (e.g., 4).
+        is_maximizing (bool): Whether to maximize (current player) or minimize (opponent).
+        alpha (float): The alpha value for alpha-beta pruning (default: negative infinity).
+        beta (float): The beta value for alpha-beta pruning (default: positive infinity).
+        remaining_time (int): Remaining time in milliseconds (default: effectively unlimited).
+
+    Returns:
+        Tuple[Optional[Action], float]: The best action and its associated score.
+    """
+    # Check for cached result in transposition table
+    state_key = (hash(current_state), depth, is_maximizing)
+    if state_key in transposition_table:
+        print(f"Using cached result for state {state_key}")
+        return transposition_table[state_key]
+
+    if depth == 0 or current_state.is_done():
         other_player = get_other_player(player, current_state)
+        score = current_state.scores[player.get_id()] - current_state.scores[other_player.get_id()]
+        return None, score
 
-        return current_state.scores[player.get_id()] - current_state.scores[other_player.get_id()], None
-    
-    best_score = -999999
     best_action = None
 
-    for action in current_state.generate_possible_heavy_actions():
-        state = action.get_next_game_state()
-        score, _ = _minValue(player, state, a, b, turns_to_search - 1, remaining_time)
+    # Sort actions for move ordering
+    actions = sorted(
+        current_state.generate_possible_heavy_actions(),
+        key=lambda x: evaluate_action(player, x, current_state),  # Evaluation heuristic for sorting
+        reverse=is_maximizing
+    )
 
-        if score > best_score:
-            best_score = score
-            best_action = action
-            a = max(a, best_score)
+    if is_maximizing:
+        max_score = float('-inf')
+        for action in actions:
+            state = action.get_next_game_state()
+            _, score = minimax_heuristic(player, state, depth - 1, False, alpha, beta, remaining_time)
+            if score > max_score:
+                max_score = score
+                best_action = action
+            alpha = max(alpha, score)
 
-        if best_score > b:
-            return best_score, best_action
+            if beta <= alpha:
+                break
+        transposition_table[state_key] = (best_action, max_score)
+        return best_action, max_score
 
-    return best_score, best_action
+    else:
+        min_score = float('inf')
+        for action in actions:
+            state = action.get_next_game_state()
+            _, score = minimax_heuristic(player, state, depth - 1, True, alpha, beta, remaining_time)
+            if score < min_score:
+                min_score = score
+                best_action = action
+            beta = min(beta, score)
 
-def _minValue(player: PlayerDivercite, current_state: GameState, a: int, b: int, turns_to_search: int = 2, remaining_time: int = 1e9) -> tuple[int, any]:
-    if turns_to_search == 0 or current_state.is_done():
-        other_player = get_other_player(player, current_state)
-
-        return current_state.scores[player.get_id()] - current_state.scores[other_player.get_id()], None
-    
-    worst_score = 999999
-    worst_action = None
-
-    for action in current_state.generate_possible_heavy_actions():
-        state = action.get_next_game_state()
-        score, _ = _maxValue(player, state, a, b, turns_to_search - 1, remaining_time)
-
-        if score < worst_score:
-            worst_score = score
-            worst_action = action
-            b = min(b, worst_score)
-
-        if worst_score <= a:
-            return worst_score, worst_action
-
-    return worst_score, worst_action
+            if beta <= alpha:
+                break
+        transposition_table[state_key] = (best_action, min_score)
+        return best_action, min_score
 
 def compute_action(player: PlayerDivercite, current_state: GameState, remaining_time: int = 1e9, **kwargs) -> Action:
     """
@@ -67,8 +96,8 @@ def compute_action(player: PlayerDivercite, current_state: GameState, remaining_
     Returns:
         Action: The best action as determined by minimax.s
     """
+    
 
-    _, best_action = _maxValue(player, current_state, -999999, 999999, current_state.get_step() // 10 + 3)
-
+    best_action, _ = minimax_heuristic(player, current_state, depth=3, is_maximizing=True, alpha=float('-inf'), beta=float('inf'))
     return best_action
     

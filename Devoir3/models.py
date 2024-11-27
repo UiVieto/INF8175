@@ -1,3 +1,6 @@
+# Huy Viet Nguyen, 2136374
+# Alaa Eddine Chenak, 1976567
+
 import nn
 from backend import PerceptronDataset, RegressionDataset, DigitClassificationDataset
 
@@ -226,11 +229,13 @@ class DigitClassificationModel(object):
         """
         "*** TODO: COMPLETE HERE FOR QUESTION 3 ***"
         validation_accuracy = 0.0
-        learning_rate = 0.1
+        learning_rate = 0.8
 
-        while validation_accuracy < 0.97:
+        while validation_accuracy < 0.972:
             for x, y in dataset.iterate_once(100):
-                self.run(x)
+                if validation_accuracy > 0.972:
+                    break
+
                 loss = self.get_loss(x, y)
                 gradients = nn.gradients(loss, [
                     self.w1, self.b1,

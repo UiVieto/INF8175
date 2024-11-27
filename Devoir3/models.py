@@ -1,7 +1,6 @@
 import nn
 from backend import PerceptronDataset, RegressionDataset, DigitClassificationDataset
 
-
 class PerceptronModel(object):
     def __init__(self, dimensions: int) -> None:
         """
@@ -69,6 +68,18 @@ class RegressionModel(object):
     def __init__(self) -> None:
         # Initialize your model parameters here
         "*** TODO: COMPLETE HERE FOR QUESTION 2 ***"
+        self.w1 = nn.Parameter(1, 10) 
+        self.b1 = nn.Parameter(1, 10)
+
+        self.w2 = nn.Parameter(10, 10)
+        self.b2 = nn.Parameter(1, 10)
+
+        self.w3 = nn.Parameter(10, 10)
+        self.b3 = nn.Parameter(1, 10)
+
+        self.w4 = nn.Parameter(10, 1)
+        self.b4 = nn.Parameter(1, 1)
+
 
     def run(self, x: nn.Constant) -> nn.Node:
         """
@@ -81,6 +92,27 @@ class RegressionModel(object):
         """
         "*** TODO: COMPLETE HERE FOR QUESTION 2 ***"
 
+        # Première couche
+        result = nn.Linear(x, self.w1)
+        result = nn.AddBias(result, self.b1)
+        
+        # Deuxième couche
+        result = nn.ReLU(result)
+        result = nn.Linear(result, self.w2)
+        result = nn.AddBias(result, self.b2)
+
+        # Troisième couche
+        result = nn.ReLU(result)
+        result = nn.Linear(result, self.w3)
+        result = nn.AddBias(result, self.b3)
+
+        # Quatrième couche
+        result = nn.ReLU(result)
+        result = nn.Linear(result, self.w4)
+        result = nn.AddBias(result, self.b4)
+
+        return result
+
     def get_loss(self, x: nn.Constant, y: nn.Constant) -> nn.Node:
         """
         Computes the loss for a batch of examples.
@@ -92,12 +124,39 @@ class RegressionModel(object):
         Returns: a loss node
         """
         "*** TODO: COMPLETE HERE FOR QUESTION 2 ***"
+        predictions = self.run(x)
+
+        return nn.SquareLoss(predictions, y)
 
     def train(self, dataset: RegressionDataset) -> None:
         """
         Trains the model.
         """
         "*** TODO: COMPLETE HERE FOR QUESTION 2 ***"
+        learning_rate = 0.00025
+        for epoch in range(200000):
+            for x, y in dataset.iterate_once(dataset.y.size):
+                prediction = self.run(x)
+                loss = self.get_loss(prediction, y)
+
+                gradient = nn.gradients(loss, [
+                    self.w1, self.b1, 
+                    self.w2, self.b2,
+                    self.w3, self.b3,
+                    self.w4, self.b4,
+                ])
+
+                self.w1.update(gradient[0], -learning_rate)
+                self.b1.update(gradient[1], -learning_rate)
+
+                self.w2.update(gradient[2], -learning_rate)
+                self.b2.update(gradient[3], -learning_rate)
+
+                self.w3.update(gradient[4], -learning_rate)
+                self.b3.update(gradient[5], -learning_rate)
+
+                self.w4.update(gradient[6], -learning_rate)
+                self.b4.update(gradient[7], -learning_rate)
 
 
 class DigitClassificationModel(object):
@@ -118,6 +177,14 @@ class DigitClassificationModel(object):
     def __init__(self) -> None:
         # Initialize your model parameters here
         "*** TODO: COMPLETE HERE FOR QUESTION 3 ***"
+        self.w1 = nn.Parameter(784, 256)
+        self.b1 = nn.Parameter(1, 256)
+
+        self.w2 = nn.Parameter(256, 128)
+        self.b2 = nn.Parameter(1, 128)
+
+        self.w3 = nn.Parameter(128, 10)
+        self.b3 = nn.Parameter(1, 10)
 
     def run(self, x: nn.Constant) -> nn.Node:
         """
@@ -134,6 +201,18 @@ class DigitClassificationModel(object):
                 (also called logits)
         """
         "*** TODO: COMPLETE HERE FOR QUESTION 3 ***"
+        result = nn.Linear(x, self.w1)
+        result = nn.AddBias(result, self.b1)
+
+        result = nn.ReLU(result)
+        result = nn.Linear(result, self.w2)
+        result = nn.AddBias(result, self.b2)
+
+        result = nn.ReLU(result)
+        result = nn.Linear(result, self.w3)
+        result = nn.AddBias(result, self.b3)
+
+        return result
 
     def get_loss(self, x: nn.Constant, y: nn.Constant) -> nn.Node:
         """
@@ -149,9 +228,33 @@ class DigitClassificationModel(object):
         Returns: a loss node
         """
         "*** TODO: COMPLETE HERE FOR QUESTION 3 ***"
+        return nn.SoftmaxLoss(self.run(x), y)
 
     def train(self, dataset: DigitClassificationDataset) -> None:
         """
         Trains the model.
         """
         "*** TODO: COMPLETE HERE FOR QUESTION 3 ***"
+        validation_accuracy = 0.0
+        learning_rate = 0.1
+
+        while validation_accuracy < 0.97:
+            for x, y in dataset.iterate_once(100):
+                self.run(x)
+                loss = self.get_loss(x, y)
+                gradients = nn.gradients(loss, [
+                    self.w1, self.b1,
+                    self.w2, self.b2,
+                    self.w3, self.b3,
+                ])
+
+                self.w1.update(gradients[0], -learning_rate)
+                self.b1.update(gradients[1], -learning_rate)
+
+                self.w2.update(gradients[2], -learning_rate)
+                self.b2.update(gradients[3], -learning_rate)
+
+                self.w3.update(gradients[4], -learning_rate)
+                self.b3.update(gradients[5], -learning_rate)
+
+                validation_accuracy = dataset.get_validation_accuracy()

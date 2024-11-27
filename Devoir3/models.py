@@ -68,18 +68,14 @@ class RegressionModel(object):
     def __init__(self) -> None:
         # Initialize your model parameters here
         "*** TODO: COMPLETE HERE FOR QUESTION 2 ***"
-        self.w1 = nn.Parameter(1, 10) 
-        self.b1 = nn.Parameter(1, 10)
+        self.w1 = nn.Parameter(1, 200) 
+        self.b1 = nn.Parameter(1, 200)
 
-        self.w2 = nn.Parameter(10, 10)
-        self.b2 = nn.Parameter(1, 10)
+        self.w2 = nn.Parameter(200, 200)
+        self.b2 = nn.Parameter(1, 200)
 
-        self.w3 = nn.Parameter(10, 10)
-        self.b3 = nn.Parameter(1, 10)
-
-        self.w4 = nn.Parameter(10, 1)
-        self.b4 = nn.Parameter(1, 1)
-
+        self.w3 = nn.Parameter(200, 1)
+        self.b3 = nn.Parameter(1, 1)
 
     def run(self, x: nn.Constant) -> nn.Node:
         """
@@ -106,11 +102,6 @@ class RegressionModel(object):
         result = nn.Linear(result, self.w3)
         result = nn.AddBias(result, self.b3)
 
-        # Quatrième couche
-        result = nn.ReLU(result)
-        result = nn.Linear(result, self.w4)
-        result = nn.AddBias(result, self.b4)
-
         return result
 
     def get_loss(self, x: nn.Constant, y: nn.Constant) -> nn.Node:
@@ -133,17 +124,16 @@ class RegressionModel(object):
         Trains the model.
         """
         "*** TODO: COMPLETE HERE FOR QUESTION 2 ***"
-        learning_rate = 0.00025
-        for epoch in range(200000):
-            for x, y in dataset.iterate_once(dataset.y.size):
-                prediction = self.run(x)
-                loss = self.get_loss(prediction, y)
+        learning_rate = 0.01
+        total_loss = float('inf')
+        while total_loss > 0.01:
+            for x, y in dataset.iterate_once(10):
+                loss = self.get_loss(x, y)
 
                 gradient = nn.gradients(loss, [
                     self.w1, self.b1, 
                     self.w2, self.b2,
                     self.w3, self.b3,
-                    self.w4, self.b4,
                 ])
 
                 self.w1.update(gradient[0], -learning_rate)
@@ -155,8 +145,8 @@ class RegressionModel(object):
                 self.w3.update(gradient[4], -learning_rate)
                 self.b3.update(gradient[5], -learning_rate)
 
-                self.w4.update(gradient[6], -learning_rate)
-                self.b4.update(gradient[7], -learning_rate)
+            for x, y in dataset.iterate_once(dataset.y.size):
+                total_loss = nn.as_scalar(self.get_loss(x, y))
 
 
 class DigitClassificationModel(object):

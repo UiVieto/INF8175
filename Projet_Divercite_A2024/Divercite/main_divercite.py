@@ -20,7 +20,7 @@ from argparse import RawTextHelpFormatter
 
 def play(player1, player2, log_level, port, address, gui, record, gui_path) :
 
-    time_limit = 60*15000
+    time_limit = 15 * 60
     list_players = [player1, player2]
     init_scores = {player1.get_id(): 0, player2.get_id(): 0}
     dim = [9, 9]

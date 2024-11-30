@@ -1,22 +1,24 @@
-from player_divercite import PlayerDivercite
+from enum import Enum
+from itertools import product
+
 from seahorse.game.action import Action
 from seahorse.game.game_state import GameState
 from seahorse.game.game_layout.board import Piece
-from enum import Enum
-import threading
-from itertools import product
 
-MAX_TIME = 60
+from player_divercite import PlayerDivercite
+
+
+ONE_MINUTE = 60
 class GamePhase(Enum):
     START = "start"
     MID = "mid"
     END = "end"
 
-Evaluation = tuple[int, float]
+Evaluation = tuple[int, float]  # Score difference, Positional strength
 
 
 class MyPlayer(PlayerDivercite):
-    def __init__(self, piece_type: str, name: str = "HeuristicMinMax") -> None:
+    def __init__(self, piece_type: str, name: str = "HeuristicMinMaxer") -> None:
         """
         Initialize the PlayerDivercite instance.
         
@@ -30,6 +32,7 @@ class MyPlayer(PlayerDivercite):
     def get_game_phase(self, current_state: GameState, start_g = 0.3, end_g = 0.63) -> GamePhase:
         """
         Determine the current game phase based on the current state.
+        The game phase is divided into three parts: start, mid, and end.
         
         Args:
             current_state (GameState): Current game state
@@ -48,25 +51,23 @@ class MyPlayer(PlayerDivercite):
         else:
             return GamePhase.END
         
-    def dynamic_depth(self, game_phrase: GamePhase, remaining_time: float, depth_min = 1, depth_max = 2, init_depth = 1) -> int:
+    def dynamic_depth(self, game_phrase: GamePhase, remaining_time: int) -> int:
         """ 
         Determines the depth of the search tree based on the game phase.
         
         Args:
             game_phrase (GamePhase): Current game phase
-            depth_min (int, optional): Minimum depth (default is 1)
-            depth_max (int, optional): Maximum depth (default is 2)
-            init_depth (int, optional): Initial depth (default is 1)
+            remaining_time (int): Remaining time for the agent
         
         Returns:
             int: Determined depth of the search tree
         """
-        if game_phrase == GamePhase.START or MAX_TIME > remaining_time:
-            return init_depth + 2 * depth_min
-        elif 3 * MAX_TIME > remaining_time:
-            return 2 * (init_depth + depth_min)
+        if ONE_MINUTE > remaining_time or GamePhase.START == game_phrase:
+            return 3
+        elif GamePhase.MID == game_phrase or ONE_MINUTE * 4 > remaining_time:
+            return 4
         else:
-            return init_depth + 2 * depth_max 
+            return 5
     
     def get_opponent(self, state: GameState) -> PlayerDivercite:
         """
@@ -108,6 +109,39 @@ class MyPlayer(PlayerDivercite):
         
         return score
     
+    def evaluate_positional_strength(self, game_state, player_id) -> float:
+        """Evaluate the positional strength for a specific player based on the pieces in the current game state."""
+        positional_strength = 0
+        board_env = game_state.get_rep().get_env()
+        dimensions = game_state.get_rep().get_dimensions()
+
+        for i, j in product(range(dimensions[0]), range(dimensions[1])):
+            if game_state.in_board((i, j)) and (i, j) in board_env:
+                piece = board_env[(i, j)]
+                if not isinstance(piece, Piece) or piece.get_owner_id() != player_id:
+                    continue  # Pass if it is not a piece or if it is the piece of the opponent
+
+                neighbors = game_state.get_neighbours(i, j)
+                strength = 0.0
+
+                if (i, j) in [(3, 4), (4, 3), (5, 4), (4, 5)]:
+                    strength += 0.2  # Bonus for pieces in the center
+
+                for neighbor in neighbors.values():
+                    neighbor_piece = neighbor[0]
+                    if isinstance(neighbor_piece, Piece):  # Ensure neighbor_piece is a Piece instance
+                        if neighbor_piece.get_owner_id() == player_id:
+                            if neighbor_piece.get_type()[0] == piece.get_type()[0]:
+                                strength += 1.0  # Friendly matching color/type
+                            else:
+                                strength -= 0.5  # Competition between friendly pieces
+                        else:
+                            if neighbor_piece.get_type()[0] == piece.get_type()[0]:
+                                strength += 1.0  # Possible gain of ressource from opposing player 
+                            strength -= 1.0  # Opposing player with different type/color
+                positional_strength += strength
+        return positional_strength
+    
     def evaluate_action(self, current_state: GameState, score: dict[int, float]) -> Evaluation:
         """
         Evaluate the action to be taken.
@@ -127,105 +161,6 @@ class MyPlayer(PlayerDivercite):
     def minmax_heuristic(self, current_state: GameState, remaining_time: int, depth: int, game_ph: GamePhase) -> Action:
         scores_c = current_state.scores
 
-        def quiescence_search(state: GameState, alpha: Evaluation, beta: Evaluation, is_maximizing: bool) -> float:
-            """
-            Quiescence search for refining evaluations of unstable positions.
-            
-            Args:
-                state (GameState): Current game state
-                alpha (int): Alpha value
-                beta (int): Beta value
-                is_maximizing (bool): Whether to maximize (current player) or minimize (opponent)
-                
-            Returns:
-                float: The refined score of the position
-            """
-            stand_pat = self.evaluate_action(state, scores_c)
-
-            if is_maximizing and stand_pat >= beta or MAX_TIME > remaining_time:
-                return beta
-            if not is_maximizing and stand_pat <= alpha:
-                return alpha
-
-            if is_maximizing:
-                alpha = max(alpha, stand_pat)
-            else:
-                beta = min(beta, stand_pat)
-
-            for action in state.generate_possible_light_actions():
-                next_state = state.apply_action(action)
-
-                score = quiescence_search(next_state, alpha, beta, not is_maximizing)
-                if is_maximizing:
-                    alpha = max(alpha, score)
-                    if alpha >= beta:
-                        break
-                else:
-                    beta = min(beta, score)
-                    if beta <= alpha:
-                        break
-
-            return alpha if is_maximizing else beta
-
-        def pvs(state: GameState, alpha: Evaluation, beta: Evaluation, depth: int, is_maximizing: bool) -> Evaluation:
-            """
-            Principal Variation Search (PVS) applied during the endgame phase.
-            
-            Args:
-                state (GameState): Current game state
-                alpha (int): Alpha value
-                beta (int): Beta value
-                depth (int): Depth of the search tree
-                is_maximizing (bool): Whether to maximize (current player) or minimize (opponent)
-                
-            Returns:
-                float: The refined score of the position
-            """
-            state_key = hash((hash(state), depth, is_maximizing))
-            if state_key in self.transposition_table:
-                return self.transposition_table[state_key][1]
-
-            if depth == 0 or state.is_done() or MAX_TIME > remaining_time:
-                return quiescence_search(state, alpha, beta, is_maximizing)
-
-            moves = state.generate_possible_light_actions()
-            if not moves:
-                return self.evaluate_action(state, scores_c)
-
-            principal_move_found = False
-            best_score = (float('-inf'), float('-inf')) if is_maximizing else (float('inf'), float('inf'))
-
-            for action in moves:
-                next_state = state.apply_action(action)
-
-                if next_state is None:
-                    continue
-
-                if principal_move_found:
-                    score = pvs(next_state, (-alpha[0] - 1, -alpha[1]), (-alpha[0], -alpha[1]), depth - 1, not is_maximizing)
-                    score = (-score[0], -score[1])
-                    if alpha < score < beta:
-                        score = pvs(next_state, (-beta[0], -beta[1]), (-alpha[0], -alpha[1]), depth - 1, not is_maximizing)
-                        score = (-score[0], -score[1])
-                else:
-                    score = pvs(next_state, (-beta[0], -beta[1]), (-alpha[0], -alpha[1]), depth - 1, not is_maximizing)
-                    score = (-score[0], -score[1])
-                    principal_move_found = True
-
-                if is_maximizing:
-                    best_score = max(best_score, score)
-                    alpha = max(alpha, score)
-                else:
-                    best_score = min(best_score, score)
-                    beta = min(beta, score)
-
-                if alpha >= beta:
-                    break
-
-            self.transposition_table[state_key] = (None, best_score)
-            
-            return best_score
-
         def max_h(state: GameState, alpha: Evaluation, beta: Evaluation, depth: int) -> tuple[Action, float]:
             """
             Maximizing player logic using Minimax or PVS during the endgame.
@@ -244,8 +179,6 @@ class MyPlayer(PlayerDivercite):
                 return self.transposition_table[state_key]
 
             if depth == 0 or state.is_done():
-                if game_ph in {GamePhase.END}:
-                    return None, pvs(state, alpha, beta, depth, is_maximizing=True)
                 return None, self.evaluate_action(state, scores_c)
 
             best_action, max_score = None, (float('-inf'), float('-inf'))
@@ -279,8 +212,6 @@ class MyPlayer(PlayerDivercite):
                 return self.transposition_table[state_key]
 
             if depth == 0 or state.is_done():
-                if game_ph in {GamePhase.END}:
-                    return None, pvs(state, alpha, beta, depth, is_maximizing=False)
                 return None, self.evaluate_action(state, scores_c)
 
             best_action, min_score = None, (float('inf'), float('inf'))
@@ -297,40 +228,6 @@ class MyPlayer(PlayerDivercite):
             return best_action, min_score
 
         return max_h(current_state, (float('-inf'), float('-inf')), (float('inf'), float('inf')), depth)[0]
-
-
-    def evaluate_positional_strength(self, game_state, player_id) -> float:
-        """Evaluate the positional strength for a specific player based on the pieces in the current game state."""
-        positional_strength = 0
-        board_env = game_state.get_rep().get_env()
-        dimensions = game_state.get_rep().get_dimensions()
-
-        for i, j in product(range(dimensions[0]), range(dimensions[1])):
-            if game_state.in_board((i, j)) and (i, j) in board_env:
-                piece = board_env[(i, j)]
-                if not isinstance(piece, Piece) or piece.get_owner_id() != player_id:
-                    continue  # Pass if it is not a piece or if it is the piece of the opponent
-
-                neighbors = game_state.get_neighbours(i, j)
-                strength = 0.0
-
-                if (i, j) in [(3, 4), (4, 3), (5, 4), (4, 5)]:
-                    strength += 0.2  # Bonus for pieces in the center
-
-                for neighbor in neighbors.values():
-                    neighbor_piece = neighbor[0]
-                    if isinstance(neighbor_piece, Piece):  # Ensure neighbor_piece is a Piece instance
-                        if neighbor_piece.get_owner_id() == player_id:
-                            if neighbor_piece.get_type()[0] == piece.get_type()[0]:
-                                strength += 1.0  # Friendly matching color/type
-                            else:
-                                strength -= 0.5  # Competition between friendly pieces
-                        else:
-                            if neighbor_piece.get_type()[0] == piece.get_type()[0]:
-                                strength += 1.0  # Possible gain of ressource from opposing player 
-                            strength -= 1.0  # Opposing player with different type/color
-                positional_strength += strength
-        return positional_strength
         
     def compute_action(self, current_state, remaining_time: int = 1e9, **kwargs) -> Action:
         """

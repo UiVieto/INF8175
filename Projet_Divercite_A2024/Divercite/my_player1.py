@@ -1,16 +1,19 @@
-import copy
-import json
-import random
 from player_divercite import PlayerDivercite
 from seahorse.game.action import Action
 from seahorse.game.game_state import GameState
-from seahorse.game.heavy_action import HeavyAction
-from seahorse.game.light_action import LightAction
-import threading
+from game_state_divercite import GameStateDivercite
+from seahorse.utils.custom_exceptions import MethodNotImplementedError
+import json
+import time
+
+
+JSON_FILE_PATH = "algorithm_time_metrics1.json"
+with open(JSON_FILE_PATH, mode="w") as file:
+    json.dump([], file)  # Start with an empty list
 
 # Define transposition table for caching
 transposition_table = {}
-
+node_1 = 0
 def get_other_player(my_player: PlayerDivercite, state: GameState) -> PlayerDivercite:
     for player in state.get_players():
         if player.get_id() != my_player.get_id():
@@ -55,7 +58,7 @@ def minimax_heuristic(player: PlayerDivercite, current_state: GameState, depth: 
         min_score = float('inf')
         for action in actions:
             state = action.get_next_game_state()
-            _, score = minimax_heuristic(player, state, depth , True, alpha, beta, remaining_time)
+            _, score = minimax_heuristic(player, state, depth - 1, True, alpha, beta, remaining_time)
             if score < min_score:
                 min_score = score
                 best_action = action
@@ -65,44 +68,20 @@ def minimax_heuristic(player: PlayerDivercite, current_state: GameState, depth: 
         transposition_table[state_key] = (best_action, min_score)
         return best_action, min_score
 
-def quiescence_search(player: PlayerDivercite, current_state: GameState, depth: int, is_maximizing: bool, alpha: float = float('-inf'), beta: float = float('inf'), remaining_time: int = 1e9):
-    action = None
-    best_score = float('-inf')
-    best_score_lock = threading.Lock()
-    threads = []
-
-    def search_depth(depth_i):
-        nonlocal action, best_score
-        best_action, score = minimax_heuristic(player, current_state, depth_i, is_maximizing, alpha, beta, remaining_time)
-        with best_score_lock:
-            if score > best_score:
-                print(f"Depth {depth_i}: New best action and score found: {best_action}, {score}")
-                best_score = score
-                action = best_action
-        print(f"Depth {depth_i} completed.")
-
-    # Create and start a thread for each depth level
-    for depth_i in range(depth, 0, -1):
-        thread = threading.Thread(target=search_depth, args=(depth_i,))
-        threads.append(thread)
-        thread.start()
-
-    # Wait for all threads to finish
-    for thread in threads:
-        thread.join()
-
-    return action, alpha
-        
 class MyPlayer(PlayerDivercite):
     def __init__(self, piece_type: str, name: str = "ShallowMinMax"):
         super().__init__(piece_type, name)
 
-    def compute_action(self, current_state, remaining_time: int = 1e9, **kwargs) -> Action:
-        # Determine the optimal depth based on current game state and remaining time
-        step = current_state.get_step()
-        remaining_steps = current_state.max_step - step
-        if remaining_steps < 15:
-            best_action, _ = quiescence_search(self, current_state, depth=5, is_maximizing=True, alpha=float('-inf'), beta=float('inf'), remaining_time=remaining_time)
-        else:
-            best_action, _ = minimax_heuristic(self, current_state, depth=3, is_maximizing=True, alpha=float('-inf'), beta=float('inf'), remaining_time=remaining_time)
+    def compute_action(self, current_state: GameState, remaining_time: int = 1e9, **kwargs) -> Action:
+        start_time = time.time()
+        best_action, _ = minimax_heuristic(self, current_state, depth=4, is_maximizing=True, alpha=float('-inf'), beta=float('inf'), remaining_time=remaining_time)
+        end_time = time.time()
+        time_taken = end_time - start_time
+        
+        with open(JSON_FILE_PATH, mode="r+") as file:
+            times = json.load(file)
+            times.append({"Time_Per_Move": time_taken})
+            file.seek(0)
+            json.dump(times, file, indent=4)
+
         return best_action

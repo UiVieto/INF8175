@@ -1,24 +1,30 @@
-from enum import Enum
-from itertools import product
-
+from player_divercite import PlayerDivercite
 from seahorse.game.action import Action
 from seahorse.game.game_state import GameState
 from seahorse.game.game_layout.board import Piece
+from enum import Enum
+from itertools import product
+import json
+import time
 
-from player_divercite import PlayerDivercite
+MAX_TIME = 60
 
-
-ONE_MINUTE = 60
+MIN_DEPTH = 3
+DEFAULT_DEPTH = 4
+MAX_DEPTH = 5
 class GamePhase(Enum):
     START = "start"
     MID = "mid"
     END = "end"
 
-Evaluation = tuple[int, float]  # Score difference, Positional strength
+Evaluation = tuple[int, float]
 
+JSON_FILE_PATH = "algorithm_time_metrics.json"
+with open(JSON_FILE_PATH, mode="w") as file:
+    json.dump([], file)  # Start with an empty list
 
 class MyPlayer(PlayerDivercite):
-    def __init__(self, piece_type: str, name: str = "HeuristicMinMaxer") -> None:
+    def __init__(self, piece_type: str, name: str = "HeuristicMinMax") -> None:
         """
         Initialize the PlayerDivercite instance.
         
@@ -32,7 +38,6 @@ class MyPlayer(PlayerDivercite):
     def get_game_phase(self, current_state: GameState, start_g = 0.3, end_g = 0.63) -> GamePhase:
         """
         Determine the current game phase based on the current state.
-        The game phase is divided into three parts: start, mid, and end.
         
         Args:
             current_state (GameState): Current game state
@@ -62,12 +67,12 @@ class MyPlayer(PlayerDivercite):
         Returns:
             int: Determined depth of the search tree
         """
-        if ONE_MINUTE > remaining_time or GamePhase.START == game_phrase:
-            return 3
-        elif GamePhase.MID == game_phrase or ONE_MINUTE * 4 > remaining_time:
-            return 4
+        if MAX_TIME > remaining_time or GamePhase.START == game_phrase:
+            return MIN_DEPTH
+        elif GamePhase.MID == game_phrase or MAX_TIME * 4 > remaining_time:
+            return DEFAULT_DEPTH
         else:
-            return 5
+            return MAX_DEPTH
     
     def get_opponent(self, state: GameState) -> PlayerDivercite:
         """
@@ -161,6 +166,47 @@ class MyPlayer(PlayerDivercite):
     def minmax_heuristic(self, current_state: GameState, remaining_time: int, depth: int, game_ph: GamePhase) -> Action:
         scores_c = current_state.scores
 
+        def quiescence_search(state: GameState, alpha: Evaluation, beta: Evaluation, is_maximizing: bool) -> Evaluation:
+            """
+            Quiescence search for refining evaluations of unstable positions.
+            
+            Args:
+                state (GameState): Current game state
+                alpha (int): Alpha value
+                beta (int): Beta value
+                is_maximizing (bool): Whether to maximize (current player) or minimize (opponent)
+                
+            Returns:
+                float: The refined score of the position
+            """
+            
+            stand_pat = self.evaluate_action(state, scores_c)
+            
+            if is_maximizing and stand_pat >= beta or MAX_TIME > remaining_time:
+                return beta
+            if not is_maximizing and stand_pat <= alpha:
+                return alpha
+
+            if is_maximizing:
+                alpha = max(alpha, stand_pat)
+            else:
+                beta = min(beta, stand_pat)
+
+            for action in state.generate_possible_light_actions():
+                next_state = state.apply_action(action)
+
+                score = quiescence_search(next_state, alpha, beta, not is_maximizing)
+                if is_maximizing:
+                    alpha = max(alpha, score)
+                    if alpha >= beta:
+                        break
+                else:
+                    beta = min(beta, score)
+                    if beta <= alpha:
+                        break
+
+            return alpha if is_maximizing else beta
+        
         def max_h(state: GameState, alpha: Evaluation, beta: Evaluation, depth: int) -> tuple[Action, float]:
             """
             Maximizing player logic using Minimax or PVS during the endgame.
@@ -179,7 +225,8 @@ class MyPlayer(PlayerDivercite):
                 return self.transposition_table[state_key]
 
             if depth == 0 or state.is_done():
-                return None, self.evaluate_action(state, scores_c)
+                score = quiescence_search(state, alpha, beta, True) if game_ph in {GamePhase.END} else self.evaluate_action(state, scores_c)
+                return None, score
 
             best_action, max_score = None, (float('-inf'), float('-inf'))
             for action in state.generate_possible_light_actions():
@@ -212,7 +259,8 @@ class MyPlayer(PlayerDivercite):
                 return self.transposition_table[state_key]
 
             if depth == 0 or state.is_done():
-                return None, self.evaluate_action(state, scores_c)
+                score = quiescence_search(state, alpha, beta, False) if game_ph in {GamePhase.END} else self.evaluate_action(state, scores_c)
+                return None, score
 
             best_action, min_score = None, (float('inf'), float('inf'))
             for action in state.generate_possible_light_actions():
@@ -241,11 +289,19 @@ class MyPlayer(PlayerDivercite):
         Returns:
             Action: The selected action
         """
+        start_time = time.time()
         game_phrase = self.get_game_phase(current_state)
         depth = self.dynamic_depth(game_phrase, remaining_time)
+        end_time = time.time()
+        time_taken = end_time - start_time
 
         print(f"Game Phase: {game_phrase}")
         print(f"Depth: {depth}")
         print(f"Remaining time: {remaining_time} seconds")
+        with open(JSON_FILE_PATH, mode="r+") as file:
+            times = json.load(file)
+            times.append({"Time_Per_Move": time_taken})
+            file.seek(0)
+            json.dump(times, file, indent=4)
 
         return self.minmax_heuristic(current_state, remaining_time, depth, game_phrase)
